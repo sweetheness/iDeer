@@ -2,7 +2,7 @@ name: Scheduled Report Email
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 23 * * *"
   workflow_dispatch:
     inputs:
       sources:
@@ -86,10 +86,10 @@ jobs:
       INPUT_SEND_EMAIL: ${{ github.event.inputs.send_email }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -121,7 +121,7 @@ jobs:
 
       - name: Upload report artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ideer-report-${{ github.run_number }}
           retention-days: 14
