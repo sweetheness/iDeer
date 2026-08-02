@@ -105,6 +105,18 @@ jobs:
       - name: Prepare runtime config from GitHub secrets
         run: python scripts/setup_github_action_report.py
 
+      - name: Download seen papers index from NutStore
+        continue-on-error: true
+        run: |
+          echo "Downloading seen_papers.json from NutStore..."
+          curl -u "${{ secrets.NUTSTORE_WEBDAV_AUTH }}" \
+               -o seen_papers.json \
+               "${{ secrets.NUTSTORE_WEBDAV_URL }}/seen_papers.json" \
+               --connect-timeout 15 --max-time 30 2>/dev/null || echo "[]" > seen_papers.json
+          if [ ! -s seen_papers.json ]; then echo "[]" > seen_papers.json; fi
+          echo "SEEN_PAPERS_FILE=$(pwd)/seen_papers.json" >> $GITHUB_ENV
+          echo "Loaded $(python -c 'import json; print(len(json.load(open(\"seen_papers.json\"))))') seen paper IDs"
+
       - name: Run daily report pipeline
         run: |
           set -o pipefail
@@ -148,3 +160,33 @@ jobs:
                "${{ secrets.NUTSTORE_WEBDAV_URL }}/$ZIPNAME" \
                --retry 3 --retry-delay 5 --connect-timeout 30
           echo "Upload complete"
+
+      - name: Update seen papers index on NutStore
+        if: always()
+        run: |
+          python -c "
+          import json, os, glob
+          seen = set()
+          # load existing seen papers
+          try:
+              with open('seen_papers.json') as f:
+                  seen = set(json.load(f))
+          except: pass
+          # add today's paper IDs
+          for f in glob.glob('history/semanticscholar/*.json'):
+              try:
+                  data = json.load(open(f))
+                  if isinstance(data, list):
+                      for p in data:
+                          pid = p.get('paper_id', '')
+                          if pid: seen.add(pid)
+              except: pass
+          with open('seen_papers.json', 'w') as f:
+              json.dump(sorted(seen), f)
+          print(f'Updated seen_papers.json: {len(seen)} total IDs')
+          "
+          curl -u "${{ secrets.NUTSTORE_WEBDAV_AUTH }}" \
+               -T seen_papers.json \
+               "${{ secrets.NUTSTORE_WEBDAV_URL }}/seen_papers.json" \
+               --retry 3 --retry-delay 5 --connect-timeout 30
+          echo "Seen papers index updated"

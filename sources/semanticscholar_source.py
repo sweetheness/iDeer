@@ -6,6 +6,7 @@ API, which covers 200M+ papers.
 
 import argparse
 import json
+import os
 from datetime import datetime
 
 from sources.base import BaseSource
@@ -52,6 +53,29 @@ class SemanticScholarSource(BaseSource):
             )
             if self.raw_papers:
                 self._save_fetch_cache(cache_key, self.raw_papers)
+
+        # Cross-run dedup: exclude papers already seen in previous runs
+        self.seen_ids = self._load_seen_paper_ids()
+        if self.seen_ids:
+            before = len(self.raw_papers)
+            self.raw_papers = [p for p in self.raw_papers if p.get("paper_id", "") not in self.seen_ids]
+            after = len(self.raw_papers)
+            if before > after:
+                print(f"[semanticscholar] Cross-run dedup: {before} -> {after} papers ({before - after} already seen)")
+
+    @staticmethod
+    def _load_seen_paper_ids() -> set:
+        """Load paper IDs already delivered in previous runs."""
+        seen_file = os.getenv("SEEN_PAPERS_FILE", "")
+        if not seen_file or not os.path.exists(seen_file):
+            return set()
+        try:
+            data = json.loads(open(seen_file, "r", encoding="utf-8").read())
+            if isinstance(data, list):
+                return set(data)
+            return set()
+        except (json.JSONDecodeError, IOError):
+            return set()
 
     def _derive_queries_from_description(self) -> list[str]:
         """Extract search queries from the user's research description."""
