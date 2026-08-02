@@ -164,15 +164,24 @@ jobs:
       - name: Update seen papers index on NutStore
         if: always()
         run: |
+          # Always re-download the authoritative seen_papers.json from NutStore
+          # (the local copy might be empty if the earlier download step failed)
+          curl -u "${{ secrets.NUTSTORE_WEBDAV_AUTH }}" \
+               -o seen_papers_remote.json \
+               "${{ secrets.NUTSTORE_WEBDAV_URL }}/seen_papers.json" \
+               --connect-timeout 15 --max-time 30 2>/dev/null || echo "[]" > seen_papers_remote.json
+          if [ ! -s seen_papers_remote.json ]; then echo "[]" > seen_papers_remote.json; fi
+
           python -c "
           import json, os, glob
+          # start from the authoritative NutStore version (not local download)
           seen = set()
-          # load existing seen papers
           try:
-              with open('seen_papers.json') as f:
+              with open('seen_papers_remote.json') as f:
                   seen = set(json.load(f))
           except: pass
-          # extract paper IDs ONLY from today's report (not all scored papers)
+          before = len(seen)
+          # extract paper IDs ONLY from today's report
           for report_file in glob.glob('history/reports/*/report.json'):
               try:
                   data = json.load(open(report_file))
@@ -182,9 +191,10 @@ jobs:
                           pid = url.split('/paper/')[-1].split('?')[0].split('#')[0]
                           if pid: seen.add(pid)
               except: pass
+          added = len(seen) - before
           with open('seen_papers.json', 'w') as f:
               json.dump(sorted(seen), f)
-          print(f'Updated seen_papers.json: {len(seen)} total IDs (report-featured only)')
+          print(f'Updated seen_papers.json: {len(seen)} total IDs (+{added} new, report-featured only)')
           "
           curl -u "${{ secrets.NUTSTORE_WEBDAV_AUTH }}" \
                -T seen_papers.json \
