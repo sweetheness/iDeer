@@ -172,18 +172,19 @@ jobs:
               with open('seen_papers.json') as f:
                   seen = set(json.load(f))
           except: pass
-          # add today's paper IDs
-          for f in glob.glob('history/semanticscholar/*.json'):
+          # extract paper IDs ONLY from today's report (not all scored papers)
+          for report_file in glob.glob('history/reports/*/report.json'):
               try:
-                  data = json.load(open(f))
-                  if isinstance(data, list):
-                      for p in data:
-                          pid = p.get('paper_id', '')
+                  data = json.load(open(report_file))
+                  for item in data.get('input_items', []):
+                      url = item.get('url', '')
+                      if '/paper/' in url:
+                          pid = url.split('/paper/')[-1].split('?')[0].split('#')[0]
                           if pid: seen.add(pid)
               except: pass
           with open('seen_papers.json', 'w') as f:
               json.dump(sorted(seen), f)
-          print(f'Updated seen_papers.json: {len(seen)} total IDs')
+          print(f'Updated seen_papers.json: {len(seen)} total IDs (report-featured only)')
           "
           curl -u "${{ secrets.NUTSTORE_WEBDAV_AUTH }}" \
                -T seen_papers.json \
